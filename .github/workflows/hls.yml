@@ -1,0 +1,88 @@
+name: Convert Videos to HLS and Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main   # or "master", adjust if needed
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install FFmpeg
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Convert all MP4/MKV to HLS
+        run: |
+          mkdir -p public
+          for f in *.mp4 *.mkv; do
+            [ -e "$f" ] || continue
+            name=$(basename "$f" | sed 's/\.[^.]*$//')
+            mkdir -p public/$name
+            ffmpeg -i "$f" -codec: copy -start_number 0 -hls_time 10 -hls_list_size 0 -f hls "public/$name/playlist.m3u8"
+          done
+
+      - name: Add HTML player page for each video
+        run: |
+          for dir in public/*/; do
+            name=$(basename "$dir")
+            cat > "$dir/index.html" <<EOF
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>\$name</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  </head>
+  <body style="background:#111;color:#fff;text-align:center;font-family:sans-serif;">
+    <h2>\$name</h2>
+    <video id="video" controls autoplay style="width:90%;max-width:900px;border:2px solid #444;border-radius:12px;"></video>
+    <script>
+      if (Hls.isSupported()) {
+        var video = document.getElementById('video');
+        var hls = new Hls();
+        hls.loadSource('playlist.m3u8');
+        hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = 'playlist.m3u8';
+      }
+    </script>
+    <p><a href="../index.html" style="color:#0af;">⬅ Back to Video List</a></p>
+  </body>
+</html>
+EOF
+          done
+
+      - name: Create Main Index Page
+        run: |
+          cat > public/index.html <<EOF
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Video Library</title>
+  </head>
+  <body style="background:#111;color:#fff;font-family:sans-serif;text-align:center;">
+    <h1>📺 My Video Library</h1>
+    <ul style="list-style:none;padding:0;">
+EOF
+          for dir in public/*/; do
+            name=$(basename "$dir")
+            echo "<li style='margin:10px;'><a href='$name/' style='color:#0af;font-size:20px;'>$name</a></li>" >> public/index.html
+          done
+          cat >> public/index.html <<EOF
+    </ul>
+  </body>
+</html>
+EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
