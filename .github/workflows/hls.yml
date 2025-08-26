@@ -25,8 +25,10 @@ jobs:
             [ -e "$file" ] || continue
             name=$(basename "$file" | sed 's/\.[^.]*$//')
             mkdir -p "public/$name"
+            echo "🎬 Converting $file -> public/$name/playlist.m3u8"
             ffmpeg -i "$file" \
-              -codec: copy -start_number 0 \
+              -c:v libx264 -c:a aac \
+              -start_number 0 \
               -hls_time 10 -hls_list_size 0 \
               -f hls "public/$name/playlist.m3u8"
             echo "<li><a href='$name/index.html'>$name</a></li>" >> public/index.html.tmp
@@ -39,13 +41,14 @@ jobs:
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   </head>
   <body>
-    <video id="video" controls autoplay></video>
+    <h2>$name</h2>
+    <video id="video" controls autoplay style="width:100%; max-width:800px;"></video>
     <script>
       if (Hls.isSupported()) {
         var hls = new Hls();
         hls.loadSource('playlist.m3u8');
         hls.attachMedia(document.getElementById('video'));
-      } else {
+      } else if (document.getElementById('video').canPlayType('application/vnd.apple.mpegurl')) {
         document.getElementById('video').src = 'playlist.m3u8';
       }
     </script>
