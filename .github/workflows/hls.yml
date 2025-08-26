@@ -1,4 +1,4 @@
-name: Convert Videos to HLS and Deploy to GitHub Pages
+name: Convert Videos to HLS
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  convert:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,7 +16,9 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
       - name: Convert videos to HLS
         run: |
@@ -25,44 +27,12 @@ jobs:
             [ -e "$file" ] || continue
             name=$(basename "$file" | sed 's/\.[^.]*$//')
             mkdir -p "public/$name"
-            echo "🎬 Converting $file -> public/$name/playlist.m3u8"
+            echo "Converting $file -> public/$name/playlist.m3u8"
             ffmpeg -i "$file" \
               -c:v libx264 -c:a aac \
-              -start_number 0 \
-              -hls_time 10 -hls_list_size 0 \
-              -f hls "public/$name/playlist.m3u8"
-            echo "<li><a href='$name/index.html'>$name</a></li>" >> public/index.html.tmp
-            cat > "public/$name/index.html" <<EOF
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <title>$name</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  </head>
-  <body>
-    <h2>$name</h2>
-    <video id="video" controls autoplay style="width:100%; max-width:800px;"></video>
-    <script>
-      if (Hls.isSupported()) {
-        var hls = new Hls();
-        hls.loadSource('playlist.m3u8');
-        hls.attachMedia(document.getElementById('video'));
-      } else if (document.getElementById('video').canPlayType('application/vnd.apple.mpegurl')) {
-        document.getElementById('video').src = 'playlist.m3u8';
-      }
-    </script>
-  </body>
-</html>
-EOF
+              -hls_time 10 -hls_list_size 0 -f hls \
+              "public/$name/playlist.m3u8"
           done
-
-      - name: Generate index.html
-        run: |
-          echo "<!DOCTYPE html><html><body><h1>Videos</h1><ul>" > public/index.html
-          cat public/index.html.tmp >> public/index.html
-          echo "</ul></body></html>" >> public/index.html
-          rm public/index.html.tmp || true
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
