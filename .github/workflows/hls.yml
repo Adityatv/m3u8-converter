@@ -1,0 +1,68 @@
+name: Convert Videos to HLS and Deploy to GitHub Pages
+
+on:
+  push:
+    paths:
+      - "*.mp4"
+      - "*.mkv"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Convert videos to HLS
+        run: |
+          mkdir -p public
+          for file in *.mp4 *.mkv; do
+            [ -e "$file" ] || continue
+            name=$(basename "$file" | sed 's/\.[^.]*$//')
+            mkdir -p "public/$name"
+            ffmpeg -i "$file" \
+              -codec: copy -start_number 0 \
+              -hls_time 10 -hls_list_size 0 \
+              -f hls "public/$name/playlist.m3u8"
+            echo "<li><a href='$name/index.html'>$name</a></li>" >> public/index.html.tmp
+            cat > "public/$name/index.html" <<EOF
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>$name</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  </head>
+  <body>
+    <video id="video" controls autoplay></video>
+    <script>
+      if (Hls.isSupported()) {
+        var hls = new Hls();
+        hls.loadSource('playlist.m3u8');
+        hls.attachMedia(document.getElementById('video'));
+      } else {
+        document.getElementById('video').src = 'playlist.m3u8';
+      }
+    </script>
+  </body>
+</html>
+EOF
+          done
+
+      - name: Generate index.html
+        run: |
+          echo "<!DOCTYPE html><html><body><h1>Videos</h1><ul>" > public/index.html
+          cat public/index.html.tmp >> public/index.html
+          echo "</ul></body></html>" >> public/index.html
+          rm public/index.html.tmp || true
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
